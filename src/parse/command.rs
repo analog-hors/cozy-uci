@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use crate::UciFormatOptions;
 use crate::command::*;
+use crate::UciFormatOptions;
 
-use super::stream::{UciTokenStream, UciParseError};
+use super::stream::{UciParseError, UciTokenStream};
 
 impl UciCommand {
     pub fn parse_from(s: &str, options: &UciFormatOptions) -> Result<Self, UciParseError> {
@@ -12,19 +12,17 @@ impl UciCommand {
         let mut s = UciTokenStream::new(s);
         let cmd = match s.read_token()? {
             "uci" => Self::Uci,
-            "debug" => {
-                match s.read_token()? {
-                    "on" => Self::Debug(true),
-                    "off" => Self::Debug(false),
-                    tok => Err(UnexpectedToken(tok.to_owned()))?
-                }
-            }
+            "debug" => match s.read_token()? {
+                "on" => Self::Debug(true),
+                "off" => Self::Debug(false),
+                tok => Err(UnexpectedToken(tok.to_owned()))?,
+            },
             "isready" => Self::IsReady,
             "position" => {
                 let init_pos = match s.read_token()? {
                     "fen" => UciInitPos::Board(s.read_fen(options.chess960)?),
                     "startpos" => UciInitPos::StartPos,
-                    tok => Err(UnexpectedToken(tok.to_owned()))?
+                    tok => Err(UnexpectedToken(tok.to_owned()))?,
                 };
                 let mut moves = Vec::new();
                 if s.peek_token().is_ok() {
@@ -32,7 +30,7 @@ impl UciCommand {
                     moves = s.read_moves();
                 }
                 Self::Position { init_pos, moves }
-            },
+            }
             "setoption" => {
                 s.expect_token("name")?;
                 let name = s.read_string(|tok| matches!(tok, Some("value") | None))?;
@@ -42,7 +40,7 @@ impl UciCommand {
                     value = Some(s.read_string(|tok| tok.is_none())?);
                 }
                 Self::SetOption { name, value }
-            },
+            }
             "ucinewgame" => Self::UciNewGame,
             "stop" => Self::Stop,
             "ponderhit" => Self::PonderHit,
@@ -99,7 +97,7 @@ fn read_go_params(s: &mut UciTokenStream) -> Result<UciGoParams, UciParseError> 
             mod ident_to_str {
                 $(pub const $field: &str = stringify!($field);)*
             }
-            
+
             while let Ok(field) = s.read_token() {
                 match field {
                     $(ident_to_str::$field => $body)*

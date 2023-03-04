@@ -1,8 +1,8 @@
-use std::{iter::Peekable, str::FromStr};
-use std::str::SplitAsciiWhitespace;
 use std::num::ParseIntError;
+use std::str::SplitAsciiWhitespace;
+use std::{iter::Peekable, str::FromStr};
 
-use cozy_chess::{Move, Board, MoveParseError, FenParseError};
+use cozy_chess::{Board, FenParseError, Move, MoveParseError};
 use thiserror::*;
 
 use crate::permill::PermillParseError;
@@ -35,14 +35,14 @@ pub enum UciParseError {
 
 pub struct UciTokenStream<'s> {
     str: &'s str,
-    iter: Peekable<SplitAsciiWhitespace<'s>>
+    iter: Peekable<SplitAsciiWhitespace<'s>>,
 }
 
 impl<'s> UciTokenStream<'s> {
     pub fn new(str: &'s str) -> Self {
         Self {
             str,
-            iter: str.split_ascii_whitespace().peekable()
+            iter: str.split_ascii_whitespace().peekable(),
         }
     }
 
@@ -51,14 +51,20 @@ impl<'s> UciTokenStream<'s> {
     }
 
     pub fn peek_token(&mut self) -> Result<&'s str, UciParseError> {
-        self.iter.peek().copied().ok_or(UciParseError::UnexpectedEnd)
+        self.iter
+            .peek()
+            .copied()
+            .ok_or(UciParseError::UnexpectedEnd)
     }
 
-    pub fn read_string(&mut self, terminates: impl Fn(Option<&str>) -> bool) -> Result<String, UciParseError> {
+    pub fn read_string(
+        &mut self,
+        terminates: impl Fn(Option<&str>) -> bool,
+    ) -> Result<String, UciParseError> {
         let base = self.str.as_ptr() as usize;
         let start = match self.iter.peek() {
             Some(tok) => tok.as_ptr() as usize - base,
-            None => self.str.len()
+            None => self.str.len(),
         };
         let mut end = start;
         while !terminates(self.iter.peek().copied()) {
@@ -68,7 +74,10 @@ impl<'s> UciTokenStream<'s> {
         Ok(self.str[start..end].to_owned())
     }
 
-    pub fn read_type<T: FromStr>(&mut self) -> Result<T, UciParseError> where UciParseError: From<T::Err> {
+    pub fn read_type<T: FromStr>(&mut self) -> Result<T, UciParseError>
+    where
+        UciParseError: From<T::Err>,
+    {
         Ok(self.read_token()?.parse()?)
     }
 
@@ -76,7 +85,7 @@ impl<'s> UciTokenStream<'s> {
         match self.read_token()? {
             "true" => Ok(true),
             "false" => Ok(false),
-            tok => Err(UciParseError::UnexpectedToken(tok.to_owned()))
+            tok => Err(UciParseError::UnexpectedToken(tok.to_owned())),
         }
     }
 

@@ -33,7 +33,6 @@ pub struct UciGoParams {
     pub infinite: bool,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UciCommand {
     Uci,

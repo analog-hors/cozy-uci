@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use crate::UciFormatOptions;
 use crate::remark::*;
+use crate::UciFormatOptions;
 
-use super::stream::{UciTokenStream, UciParseError};
+use super::stream::{UciParseError, UciTokenStream};
 
 impl UciRemark {
     pub fn parse_from(s: &str, options: &UciFormatOptions) -> Result<Self, UciParseError> {
@@ -11,13 +11,11 @@ impl UciRemark {
 
         let mut s = UciTokenStream::new(s);
         let rmk = match s.read_token()? {
-            "id" => {
-                match s.read_token()? {
-                    "name" => Self::Id(UciIdInfo::Name(s.read_string(|tok| tok.is_none())?)),
-                    "author" => Self::Id(UciIdInfo::Author(s.read_string(|tok| tok.is_none())?)),
-                    tok => Err(UnexpectedToken(tok.to_owned()))?,
-                }
-            }
+            "id" => match s.read_token()? {
+                "name" => Self::Id(UciIdInfo::Name(s.read_string(|tok| tok.is_none())?)),
+                "author" => Self::Id(UciIdInfo::Author(s.read_string(|tok| tok.is_none())?)),
+                tok => Err(UnexpectedToken(tok.to_owned()))?,
+            },
             "uciok" => Self::UciOk,
             "readyok" => Self::ReadyOk,
             "bestmove" => {
@@ -52,7 +50,7 @@ fn read_info(s: &mut UciTokenStream, options: &UciFormatOptions) -> Result<UciIn
             mod ident_to_str {
                 $(pub const $field: &str = stringify!($field);)*
             }
-            
+
             let mut info = UciInfo::default();
             while let Ok(field) = s.read_token() {
                 match field {
@@ -131,11 +129,14 @@ fn read_option_info(s: &mut UciTokenStream) -> Result<UciOptionInfo, UciParseErr
             let default = s.read_string(|tok| tok.is_none())?;
             UciOptionInfo::String { default }
         }
-        tok => Err(UciParseError::UnexpectedToken(tok.to_owned()))?
+        tok => Err(UciParseError::UnexpectedToken(tok.to_owned()))?,
     })
 }
 
-fn read_uci_score(s: &mut UciTokenStream, options: &UciFormatOptions) -> Result<UciScore, UciParseError> {
+fn read_uci_score(
+    s: &mut UciTokenStream,
+    options: &UciFormatOptions,
+) -> Result<UciScore, UciParseError> {
     let mut cp = None;
     let mut mate = None;
     let mut wdl = None;
@@ -145,7 +146,7 @@ fn read_uci_score(s: &mut UciTokenStream, options: &UciFormatOptions) -> Result<
             "cp" => {
                 let _ = s.read_token();
                 cp.replace(s.read_type()?).is_some()
-            },
+            }
             "mate" => {
                 let _ = s.read_token();
                 mate.replace(s.read_type()?).is_some()
@@ -165,12 +166,17 @@ fn read_uci_score(s: &mut UciTokenStream, options: &UciFormatOptions) -> Result<
                 let _ = s.read_token();
                 kind.replace(UciScoreKind::UpperBound).is_some()
             }
-            _ => break
+            _ => break,
         };
         if duplicate {
             return Err(UciParseError::InvalidField("score"));
         }
     }
     let kind = kind.unwrap_or(UciScoreKind::Exact);
-    Ok(UciScore { cp, mate, wdl, kind })
+    Ok(UciScore {
+        cp,
+        mate,
+        wdl,
+        kind,
+    })
 }

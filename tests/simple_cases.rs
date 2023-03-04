@@ -1,17 +1,19 @@
 use std::time::Duration;
 
 use cozy_chess::*;
+use cozy_uci::command::{UciCommand, UciGoParams, UciInitPos};
+use cozy_uci::remark::{UciIdInfo, UciInfo, UciOptionInfo, UciRemark, UciScore, UciScoreKind};
 use cozy_uci::UciFormatOptions;
-use cozy_uci::command::{UciCommand, UciInitPos, UciGoParams};
-use cozy_uci::remark::{UciRemark, UciIdInfo, UciOptionInfo, UciInfo, UciScore, UciScoreKind};
 
 fn test_command(cmd_str: &str, expected: UciCommand, options: &mut UciFormatOptions) {
-    let cmd = UciCommand::parse_from(cmd_str, options)
-        .expect("failed to parse command");
+    let cmd = UciCommand::parse_from(cmd_str, options).expect("failed to parse command");
     assert_eq!(cmd, expected, "command was not parsed as expected");
     let cmd_roundtripped = UciCommand::parse_from(&cmd.format(options), options)
         .expect("failed to parse reformatted command");
-    assert_eq!(cmd, cmd_roundtripped, "roundtripped command is not identical");
+    assert_eq!(
+        cmd, cmd_roundtripped,
+        "roundtripped command is not identical"
+    );
 
     if let UciCommand::SetOption { name, value } = cmd {
         match name.as_str() {
@@ -23,12 +25,14 @@ fn test_command(cmd_str: &str, expected: UciCommand, options: &mut UciFormatOpti
 }
 
 fn test_remark(rmk_str: &str, expected: UciRemark, options: &mut UciFormatOptions) {
-    let rmk = UciRemark::parse_from(rmk_str, options)
-        .expect("failed to parse remark");
+    let rmk = UciRemark::parse_from(rmk_str, options).expect("failed to parse remark");
     assert_eq!(rmk, expected, "remark was not parsed as expected");
     let rmk_roundtripped = UciRemark::parse_from(&rmk.format(options), options)
         .expect("failed to parse reformatted remark");
-    assert_eq!(rmk, rmk_roundtripped, "roundtripped remark is not identical");
+    assert_eq!(
+        rmk, rmk_roundtripped,
+        "roundtripped remark is not identical"
+    );
 }
 
 macro_rules! impl_test {
@@ -249,6 +253,6 @@ fn uci_example() {
                 to: Square::F6,
                 promotion: None,
             }),
-        },        
+        },
     }
 }

@@ -13,7 +13,7 @@ pub struct UciScore {
     pub cp: Option<i32>,
     pub mate: Option<i32>,
     pub wdl: Option<(u16, u16, u16)>,
-    pub kind: UciScoreKind
+    pub kind: UciScoreKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -26,7 +26,7 @@ pub enum UciScoreKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UciCurrline {
     pub cpu: Option<u32>,
-    pub moves: Vec<Move>
+    pub moves: Vec<Move>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -47,16 +47,27 @@ pub struct UciInfo {
     pub cpuload: Option<u16>,
     pub string: Option<String>,
     pub refutation: Option<Vec<Move>>,
-    pub currline: Option<UciCurrline>
+    pub currline: Option<UciCurrline>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UciOptionInfo {
-    Check { default: bool },
-    Spin { default: i64, min: i64, max: i64 },
-    Combo { default: String, labels: Vec<String> },
+    Check {
+        default: bool,
+    },
+    Spin {
+        default: i64,
+        min: i64,
+        max: i64,
+    },
+    Combo {
+        default: String,
+        labels: Vec<String>,
+    },
     Button,
-    String { default: String },
+    String {
+        default: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -64,13 +75,7 @@ pub enum UciRemark {
     Id(UciIdInfo),
     UciOk,
     ReadyOk,
-    BestMove {
-        mv: Move,
-        ponder: Option<Move>,
-    },
+    BestMove { mv: Move, ponder: Option<Move> },
     Info(UciInfo),
-    Option {
-        name: String,
-        info: UciOptionInfo,
-    },
+    Option { name: String, info: UciOptionInfo },
 }

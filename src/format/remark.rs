@@ -1,24 +1,30 @@
-use crate::UciFormatOptions;
 use crate::remark::*;
+use crate::UciFormatOptions;
 
 use std::fmt::{Display, Formatter};
 
 struct UciRemarkFormatter<'f> {
     remark: &'f UciRemark,
-    options: &'f UciFormatOptions
+    options: &'f UciFormatOptions,
 }
 
 impl UciRemark {
     pub fn format<'f>(&'f self, options: &'f UciFormatOptions) -> String {
-        format!("{}", UciRemarkFormatter { remark: self, options })
+        format!(
+            "{}",
+            UciRemarkFormatter {
+                remark: self,
+                options
+            }
+        )
     }
 }
 
 impl Display for UciRemarkFormatter<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use UciRemark::*;
         use UciIdInfo::*;
         use UciOptionInfo::*;
+        use UciRemark::*;
 
         match self.remark {
             Id(Name(name)) => write!(f, "id name {}", name)?,
@@ -36,7 +42,9 @@ impl Display for UciRemarkFormatter<'_> {
                 write!(f, "option name {} type ", name)?;
                 match info {
                     Check { default } => write!(f, "check default {}", default)?,
-                    Spin { default, min, max } => write!(f, "spin default {} min {} max {}", default, min, max)?,
+                    Spin { default, min, max } => {
+                        write!(f, "spin default {} min {} max {}", default, min, max)?
+                    }
                     Combo { default, labels } => {
                         write!(f, "combo default {}", default)?;
                         for label in labels {
@@ -44,7 +52,7 @@ impl Display for UciRemarkFormatter<'_> {
                         }
                     }
                     Button => write!(f, "button")?,
-                    String { default } => write!(f, "string default {}", default)?
+                    String { default } => write!(f, "string default {}", default)?,
                 }
             }
         }
@@ -71,7 +79,7 @@ impl UciRemarkFormatter<'_> {
 
             () => {};
         }
-        
+
         write!(f, "info")?;
         format_info_fields! {
             depth,

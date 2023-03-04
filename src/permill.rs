@@ -1,5 +1,5 @@
-use std::str::FromStr;
 use std::num::IntErrorKind;
+use std::str::FromStr;
 
 use thiserror::*;
 
@@ -38,22 +38,22 @@ pub enum PermillParseError {
     #[error("not a valid number")]
     InvalidNumber,
     #[error("permill value is out of range (0..=1000)")]
-    OutOfRange
+    OutOfRange,
 }
 
 impl FromStr for Permill {
     type Err = PermillParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use PermillParseError::*;
         use IntErrorKind::*;
+        use PermillParseError::*;
 
         match s.parse() {
             Ok(n @ 0..=1000) => Ok(Self(n)),
             Ok(_) => Err(OutOfRange),
             Err(e) if *e.kind() == PosOverflow => Err(OutOfRange),
             Err(e) if *e.kind() == NegOverflow => Err(OutOfRange),
-            Err(_) => Err(InvalidNumber)
+            Err(_) => Err(InvalidNumber),
         }
     }
 }
