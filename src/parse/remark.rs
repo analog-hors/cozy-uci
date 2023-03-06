@@ -3,26 +3,27 @@ use std::time::Duration;
 use crate::remark::*;
 use crate::UciFormatOptions;
 
-use super::stream::{UciParseError, UciTokenStream};
+use super::error::{UciParseError, UciParseErrorKind};
+use super::stream::UciTokenStream;
+use UciParseErrorKind::*;
 
 impl UciRemark {
     pub fn parse_from(s: &str, options: &UciFormatOptions) -> Result<Self, UciParseError> {
-        use UciParseError::*;
-
         let mut s = UciTokenStream::new(s);
-        let rmk = match s.read_token()? {
+        let (rmk, rmk_span) = s.read_token()?;
+        let rmk = match rmk {
             "id" => match s.read_token()? {
-                "name" => Self::Id(UciIdInfo::Name(s.read_string(|tok| tok.is_none())?)),
-                "author" => Self::Id(UciIdInfo::Author(s.read_string(|tok| tok.is_none())?)),
-                tok => Err(UnexpectedToken(tok.to_owned()))?,
+                ("name", _) => Self::Id(UciIdInfo::Name(s.read_string(|tok| tok.is_none())?)),
+                ("author", _) => Self::Id(UciIdInfo::Author(s.read_string(|tok| tok.is_none())?)),
+                (tok, span) => Err(UnexpectedToken(tok.to_owned()).spans(span))?,
             },
             "uciok" => Self::UciOk,
             "readyok" => Self::ReadyOk,
             "bestmove" => {
                 let mv = s.read_type()?;
                 let ponder = match s.read_token() {
-                    Ok("ponder") => Some(s.read_type()?),
-                    Ok(tok) => Err(UnexpectedToken(tok.to_owned()))?,
+                    Ok(("ponder", _)) => Some(s.read_type()?),
+                    Ok((tok, span)) => Err(UnexpectedToken(tok.to_owned()).spans(span))?,
                     Err(_) => None,
                 };
                 Self::BestMove { mv, ponder }
@@ -34,7 +35,7 @@ impl UciRemark {
                 let info = read_option_info(&mut s)?;
                 Self::Option { name, info }
             }
-            rmk => Err(UnknownMessageKind(rmk.to_owned()))?,
+            rmk => Err(UnknownMessageKind(rmk.to_owned()).spans(rmk_span))?,
         };
         s.expect_end()?;
         Ok(rmk)
@@ -44,7 +45,7 @@ impl UciRemark {
 fn read_info(s: &mut UciTokenStream, options: &UciFormatOptions) -> Result<UciInfo, UciParseError> {
     macro_rules! parse_info {
         ($($field:ident => $body:expr,)*) => {{
-            use UciParseError::*;
+            use UciParseErrorKind::*;
 
             #[allow(non_upper_case_globals, unused)]
             mod ident_to_str {
@@ -52,15 +53,15 @@ fn read_info(s: &mut UciTokenStream, options: &UciFormatOptions) -> Result<UciIn
             }
 
             let mut info = UciInfo::default();
-            while let Ok(field) = s.read_token() {
+            while let Ok((field, span)) = s.read_token() {
                 match field {
                     $(ident_to_str::$field => {
                         if info.$field.is_some() {
-                            Err(DuplicateField(ident_to_str::$field))?;
+                            Err(DuplicateField(ident_to_str::$field).spans(span))?;
                         }
                         info.$field = Some($body);
                     })*
-                    _ => Err(UnknownField(field.to_owned()))?
+                    _ => Err(UnknownField(field.to_owned()).spans(span))?
                 }
             }
             Ok(info)
@@ -86,7 +87,7 @@ fn read_info(s: &mut UciTokenStream, options: &UciFormatOptions) -> Result<UciIn
         refutation => s.read_moves(),
         currline => {
             let mut cpu = None;
-            if let Ok(num) = s.peek_token().and_then(|tok| Ok(tok.parse()?)) {
+            if let Ok(Ok(num)) = s.peek_token().map(|(tok, _)| tok.parse()) {
                 let _ = s.read_token();
                 cpu = Some(num);
             }
@@ -98,10 +99,11 @@ fn read_info(s: &mut UciTokenStream, options: &UciFormatOptions) -> Result<UciIn
 
 fn read_option_info(s: &mut UciTokenStream) -> Result<UciOptionInfo, UciParseError> {
     s.expect_token("type")?;
-    Ok(match s.read_token()? {
+    let (tok, span) = s.read_token()?;
+    Ok(match tok {
         "check" => {
             s.expect_token("default")?;
-            let default = s.read_bool()?;
+            let default = s.read_bool("true", "false")?;
             UciOptionInfo::Check { default }
         }
         "spin" => {
@@ -115,11 +117,11 @@ fn read_option_info(s: &mut UciTokenStream) -> Result<UciOptionInfo, UciParseErr
         }
         "combo" => {
             s.expect_token("default")?;
-            let default = s.read_token()?.to_owned();
+            let default = s.read_token()?.0.to_owned();
             let mut labels = Vec::new();
             while s.peek_token().is_ok() {
                 s.expect_token("var")?;
-                labels.push(s.read_token()?.to_owned());
+                labels.push(s.read_token()?.0.to_owned());
             }
             UciOptionInfo::Combo { default, labels }
         }
@@ -129,7 +131,7 @@ fn read_option_info(s: &mut UciTokenStream) -> Result<UciOptionInfo, UciParseErr
             let default = s.read_string(|tok| tok.is_none())?;
             UciOptionInfo::String { default }
         }
-        tok => Err(UciParseError::UnexpectedToken(tok.to_owned()))?,
+        tok => Err(UnexpectedToken(tok.to_owned()).spans(span))?,
     })
 }
 
@@ -141,7 +143,7 @@ fn read_uci_score(
     let mut mate = None;
     let mut wdl = None;
     let mut kind = None;
-    while let Ok(tok) = s.peek_token() {
+    while let Ok((tok, span)) = s.peek_token() {
         let duplicate = match tok {
             "cp" => {
                 let _ = s.read_token();
@@ -169,7 +171,7 @@ fn read_uci_score(
             _ => break,
         };
         if duplicate {
-            return Err(UciParseError::InvalidField("score"));
+            return Err(InvalidField("score").spans(span));
         }
     }
     let kind = kind.unwrap_or(UciScoreKind::Exact);
