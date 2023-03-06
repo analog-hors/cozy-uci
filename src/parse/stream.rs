@@ -1,37 +1,12 @@
-use std::num::ParseIntError;
+use std::iter::Peekable;
+use std::ops::Range;
+use std::str::FromStr;
 use std::str::SplitAsciiWhitespace;
-use std::{iter::Peekable, str::FromStr};
 
-use cozy_chess::{Board, FenParseError, Move, MoveParseError};
-use thiserror::*;
+use cozy_chess::{Board, Move};
 
-use crate::permill::PermillParseError;
-
-#[derive(Debug, Error, Clone)]
-pub enum UciParseError {
-    #[error("unexpected token `{0}`")]
-    UnexpectedToken(String),
-    #[error("unexpected end")]
-    UnexpectedEnd,
-    #[error("unterminated string")]
-    UnterminatedString,
-    #[error("unknown message kind {0:?}")]
-    UnknownMessageKind(String),
-    #[error("duplicate field {0:?}")]
-    DuplicateField(&'static str),
-    #[error("unknown field {0:?}")]
-    UnknownField(String),
-    #[error("invalid field {0:?}")]
-    InvalidField(&'static str),
-    #[error("failed to parse move: {0}")]
-    MoveParseError(#[from] MoveParseError),
-    #[error("failed to parse fen: {0}")]
-    FenParseError(#[from] FenParseError),
-    #[error("failed to parse int: {0}")]
-    IntParseError(#[from] ParseIntError),
-    #[error("failed to parse permill: {0}")]
-    PermillParseError(#[from] PermillParseError),
-}
+use super::error::{UciParseError, UciParseErrorKind};
+use UciParseErrorKind::*;
 
 pub struct UciTokenStream<'s> {
     str: &'s str,
@@ -46,15 +21,20 @@ impl<'s> UciTokenStream<'s> {
         }
     }
 
-    pub fn read_token(&mut self) -> Result<&'s str, UciParseError> {
-        self.iter.next().ok_or(UciParseError::UnexpectedEnd)
+    pub fn read_token(&mut self) -> Result<(&'s str, Range<usize>), UciParseError> {
+        let span = self.curr_tok_span();
+        match self.iter.next() {
+            Some(tok) => Ok((tok, span)),
+            None => Err(UnexpectedEnd.spans(span)),
+        }
     }
 
-    pub fn peek_token(&mut self) -> Result<&'s str, UciParseError> {
-        self.iter
-            .peek()
-            .copied()
-            .ok_or(UciParseError::UnexpectedEnd)
+    pub fn peek_token(&mut self) -> Result<(&'s str, Range<usize>), UciParseError> {
+        let span = self.curr_tok_span();
+        match self.iter.peek().copied() {
+            Some(tok) => Ok((tok, span)),
+            None => Err(UnexpectedEnd.spans(span)),
+        }
     }
 
     pub fn read_string(
@@ -68,7 +48,10 @@ impl<'s> UciTokenStream<'s> {
         };
         let mut end = start;
         while !terminates(self.iter.peek().copied()) {
-            let part = self.iter.next().ok_or(UciParseError::UnterminatedString)?;
+            let part = self
+                .iter
+                .next()
+                .ok_or(UnterminatedString.spans(start..self.str.len()))?;
             end = part.as_ptr() as usize + part.len() - base;
         }
         Ok(self.str[start..end].to_owned())
@@ -76,33 +59,36 @@ impl<'s> UciTokenStream<'s> {
 
     pub fn read_type<T: FromStr>(&mut self) -> Result<T, UciParseError>
     where
-        UciParseError: From<T::Err>,
+        UciParseErrorKind: From<T::Err>,
     {
-        Ok(self.read_token()?.parse()?)
+        let (tok, span) = self.read_token()?;
+        tok.parse()
+            .map_err(|e| UciParseErrorKind::from(e).spans(span))
     }
 
-    pub fn read_bool(&mut self) -> Result<bool, UciParseError> {
-        match self.read_token()? {
-            "true" => Ok(true),
-            "false" => Ok(false),
-            tok => Err(UciParseError::UnexpectedToken(tok.to_owned())),
+    pub fn read_bool(&mut self, true_tok: &str, false_tok: &str) -> Result<bool, UciParseError> {
+        let (tok, span) = self.read_token()?;
+        match tok {
+            tok if tok == true_tok => Ok(true),
+            tok if tok == false_tok => Ok(false),
+            tok => Err(UnexpectedToken(tok.to_owned()).spans(span)),
         }
     }
 
     pub fn read_fen(&mut self, shredder: bool) -> Result<Board, UciParseError> {
-        let base = self.str.as_ptr() as usize;
-        let start = self.read_token()?.as_ptr() as usize - base;
+        let start = self.read_token()?.1.start;
         for _ in 0..4 {
             self.read_token()?;
         }
-        let end_token = self.read_token()?;
-        let end = end_token.as_ptr() as usize + end_token.len() - base;
-        Ok(Board::from_fen(&self.str[start..end], shredder)?)
+        let end = self.read_token()?.1.end;
+        let board = Board::from_fen(&self.str[start..end], shredder)
+            .map_err(|e| FenParseError(e).spans(start..end))?;
+        Ok(board)
     }
 
     pub fn read_moves(&mut self) -> Vec<Move> {
         let mut moves = Vec::new();
-        while let Ok(mv) = self.peek_token().and_then(|tok| Ok(tok.parse()?)) {
+        while let Ok(Ok(mv)) = self.peek_token().map(|(tok, _)| tok.parse()) {
             let _ = self.read_token();
             moves.push(mv);
         }
@@ -110,17 +96,27 @@ impl<'s> UciTokenStream<'s> {
     }
 
     pub fn expect_token(&mut self, expected: &str) -> Result<(), UciParseError> {
-        let tok = self.read_token()?;
+        let (tok, span) = self.read_token()?;
         if tok != expected {
-            return Err(UciParseError::UnexpectedToken(tok.to_owned()));
+            return Err(UnexpectedToken(tok.to_owned()).spans(span));
         }
         Ok(())
     }
 
     pub fn expect_end(&mut self) -> Result<(), UciParseError> {
+        let span = self.curr_tok_span();
         if let Some(tok) = self.iter.next() {
-            return Err(UciParseError::UnexpectedToken(tok.to_owned()));
+            return Err(UnexpectedToken(tok.to_owned()).spans(span));
         }
         Ok(())
+    }
+
+    pub fn curr_tok_span(&mut self) -> std::ops::Range<usize> {
+        let base = self.str.as_ptr() as usize;
+        let (start, len) = match self.iter.peek() {
+            Some(tok) => (tok.as_ptr() as usize - base, tok.len()),
+            None => (self.str.len(), 0),
+        };
+        start..start + len
     }
 }
