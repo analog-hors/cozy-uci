@@ -19,9 +19,11 @@ fn main() {
                 println!("{:?}", cmd);
                 continue;
             }
-            Err(err) => if !matches!(err.kind, UnknownMessageKind(_)) {
-                println!("{}", err);
-                continue;
+            Err(err) => {
+                if !matches!(err.kind, UnknownMessageKind(_)) {
+                    println!("{}", err);
+                    continue;
+                }
             }
         }
         match UciRemark::parse_from(&line, &options) {
