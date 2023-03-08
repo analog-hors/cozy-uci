@@ -41,18 +41,13 @@ impl<'s> UciTokenStream<'s> {
         &mut self,
         terminates: impl Fn(Option<&str>) -> bool,
     ) -> Result<String, UciParseError> {
-        let base = self.str.as_ptr() as usize;
-        let start = match self.iter.peek() {
-            Some(tok) => tok.as_ptr() as usize - base,
-            None => self.str.len(),
-        };
+        let start = self.curr_tok_span().start;
         let mut end = start;
         while !terminates(self.iter.peek().copied()) {
-            let part = self
-                .iter
-                .next()
-                .ok_or(UnterminatedString.spans(start..self.str.len()))?;
-            end = part.as_ptr() as usize + part.len() - base;
+            let (_, span) = self
+                .read_token()
+                .map_err(|_| UnterminatedString.spans(start..self.str.len()))?;
+            end = span.end;
         }
         Ok(self.str[start..end].to_owned())
     }
