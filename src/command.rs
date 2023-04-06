@@ -27,7 +27,7 @@ pub struct UciGoParams {
     pub binc: Option<Duration>,
     pub movestogo: Option<u32>,
     pub depth: Option<u32>,
-    pub nodes: Option<u32>,
+    pub nodes: Option<u64>,
     pub mate: Option<u32>,
     pub movetime: Option<Duration>,
     pub infinite: bool,
